@@ -137,7 +137,7 @@ export function findStartNodes(
 	destination: INode,
 	runData: IRunData = {},
 	pinData: IPinData = {},
-): INode[] {
+): Set<INode> {
 	const startNodes = findStartNodesRecursive(
 		graph,
 		trigger,
@@ -150,5 +150,5 @@ export function findStartNodes(
 		new Set(),
 	);
 
-	return [...startNodes];
+	return startNodes;
 }
