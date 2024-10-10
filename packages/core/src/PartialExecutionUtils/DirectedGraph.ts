@@ -268,6 +268,102 @@ export class DirectedGraph {
 		return this.getParentConnectionsRecursive(node, new Set());
 	}
 
+	getStronglyConnectedComponents(): Set<INode[]> {
+		let id = 0;
+		const visited: Set<INode> = new Set();
+		const ids: Map<INode, number> = new Map();
+		const lows: Map<INode, number> = new Map();
+		const stack: INode[] = [];
+		const stronglyConnectedComponents: Set<INode[]> = new Set();
+
+		const followNode = (node: INode) => {
+			if (visited.has(node)) {
+				return;
+			}
+
+			visited.add(node);
+			lows.set(node, id);
+			ids.set(node, id);
+			id++;
+			stack.push(node);
+
+			const directChildren = this.getDirectChildConnections(node).map((c) => c.to);
+			for (const child of directChildren) {
+				followNode(child);
+
+				// if node is on stack min the low id
+				if (stack.includes(child)) {
+					const childId = lows.get(child);
+					const ownId = lows.get(node);
+					a.ok(childId !== undefined);
+					a.ok(ownId !== undefined);
+					const lowId = Math.min(childId, ownId);
+
+					lows.set(node, lowId);
+				}
+			}
+
+			// after we visited all children, check if the low id is the same as the
+			// nodes id, which means we found a strongly connected component
+			const ownId = ids.get(node);
+			const ownLow = lows.get(node);
+			a.ok(ownId !== undefined);
+			a.ok(ownLow !== undefined);
+
+			if (ownId === ownLow) {
+				// pop from the stack until the stack is empty or we find a node that
+				// has a different low id
+				const scc: INode[] = [];
+				let next = stack.at(-1);
+
+				while (next && lows.get(next) === ownId) {
+					stack.pop();
+					scc.push(next);
+					next = stack.at(-1);
+				}
+
+				if (scc.length > 0) {
+					stronglyConnectedComponents.add(scc);
+				}
+			}
+		};
+
+		for (const node of this.nodes.values()) {
+			followNode(node);
+		}
+
+		return stronglyConnectedComponents;
+	}
+
+	private depthFirstSearchRecursive(
+		from: INode,
+		fn: (node: INode) => boolean,
+		seen: Set<INode>,
+	): INode | undefined {
+		if (seen.has(from)) {
+			return;
+		}
+		seen.add(from);
+
+		if (fn(from)) {
+			return from;
+		}
+
+		for (const childConnection of this.getDirectChildConnections(from)) {
+			const found = this.depthFirstSearchRecursive(childConnection.to, fn, seen);
+
+			if (found) {
+				return found;
+			}
+		}
+
+		return;
+	}
+
+	depthFirstSearch({ from, fn }: { from: INode; fn: (node: INode) => boolean }): INode | undefined {
+		return this.depthFirstSearchRecursive(from, fn, new Set());
+	}
+
 	getConnection(
 		from: INode,
 		outputIndex: number,

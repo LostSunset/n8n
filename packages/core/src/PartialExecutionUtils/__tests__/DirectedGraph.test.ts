@@ -440,4 +440,102 @@ describe('DirectedGraph', () => {
 			expect(graph).toEqual(expectedGraph);
 		});
 	});
+
+	describe('getStronglyConnectedComponents', () => {
+		// ┌─────┐    ┌─────┐    ┌─────┐
+		// │node1├───►│node2├───►│node4│
+		// └─────┘    └──┬──┘    └─────┘
+		//    ▲          │
+		//    │          │
+		// ┌──┴──┐       │
+		// │node3│◄──────┘
+		// └─────┘
+		test('find strongly connected components', () => {
+			// ARRANGE
+			const node1 = createNodeData({ name: 'Node1' });
+			const node2 = createNodeData({ name: 'Node2' });
+			const node3 = createNodeData({ name: 'Node3' });
+			const node4 = createNodeData({ name: 'Node4' });
+			const graph = new DirectedGraph()
+				.addNodes(node1, node2, node3, node4)
+				.addConnections(
+					{ from: node1, to: node2 },
+					{ from: node2, to: node3 },
+					{ from: node3, to: node1 },
+					{ from: node2, to: node4 },
+				);
+
+			// ACT
+			const stronglyConnectedComponents = graph.getStronglyConnectedComponents();
+
+			// ASSERT
+			expect(stronglyConnectedComponents.size).toEqual(2);
+			expect(stronglyConnectedComponents).toContainEqual([node4]);
+			expect(stronglyConnectedComponents).toContainEqual([node3, node2, node1]);
+		});
+
+		test('foo', () => {
+			// ARRANGE
+			const trigger = createNodeData({ name: 'trigger' });
+			const loop = createNodeData({ name: 'loop' });
+			const node = createNodeData({ name: 'node' });
+			const graph = new DirectedGraph()
+				.addNodes(trigger, loop, node)
+				.addConnections(
+					{ from: trigger, to: loop },
+					{ from: loop, outputIndex: 1, to: node },
+					{ from: node, to: loop },
+				);
+
+			// ACT
+			const stronglyConnectedComponents = graph.getStronglyConnectedComponents();
+
+			// ASSERT
+			expect(stronglyConnectedComponents.size).toEqual(2);
+			expect(stronglyConnectedComponents).toContainEqual([trigger]);
+			expect(stronglyConnectedComponents).toContainEqual([node, loop]);
+		});
+	});
+
+	describe('depthFirstSearch', () => {
+		//
+		// ┌─────┐    ┌─────┐    ┌─────┐    ┌─────┐
+		// │node0├───►│node1├───►│node2├───►│node4│
+		// └─────┘    └─────┘    └──┬──┘    └─────┘
+		//               ▲          │
+		//               │          │
+		//            ┌──┴──┐       │
+		//            │node3│◄──────┘
+		//            └─────┘
+		//
+		test('foo', () => {
+			// ARRANGE
+			const node0 = createNodeData({ name: 'Node0' });
+			const node1 = createNodeData({ name: 'Node1' });
+			const node2 = createNodeData({ name: 'Node2' });
+			const node3 = createNodeData({ name: 'Node3' });
+			const node4 = createNodeData({ name: 'Node4' });
+			const graph = new DirectedGraph()
+				.addNodes(node0, node1, node2, node3, node4)
+				.addConnections(
+					{ from: node0, to: node1 },
+					{ from: node1, to: node2 },
+					{ from: node2, to: node3 },
+					{ from: node3, to: node1 },
+					{ from: node2, to: node4 },
+				);
+			const fn = jest.fn().mockImplementation((node: INode) => node === node4);
+
+			// ACT
+			const foundNode = graph.depthFirstSearch({
+				from: node0,
+				fn,
+			});
+
+			// ASSERT
+			expect(foundNode).toBe(node4);
+			expect(fn).toHaveBeenCalledTimes(5);
+			expect(fn.mock.calls).toEqual([[node0], [node1], [node2], [node3], [node4]]);
+		});
+	});
 });

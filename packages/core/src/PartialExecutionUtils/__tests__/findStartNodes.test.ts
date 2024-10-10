@@ -370,4 +370,174 @@ describe('findStartNodes', () => {
 		expect(startNodes.size).toBe(1);
 		expect(startNodes).toContainEqual(node2);
 	});
+
+	test('PAY-1475', () => {
+		// ARRANGE
+		const trigger = createNodeData({ name: 'trigger' });
+		const loop = createNodeData({ name: 'loop' });
+		const inLoop = createNodeData({ name: 'inLoop' });
+		const afterLoop = createNodeData({ name: 'afterLoop' });
+		const graph = new DirectedGraph()
+			.addNodes(trigger, loop, inLoop, afterLoop)
+			.addConnections(
+				{ from: trigger, to: loop },
+				{ from: loop, to: inLoop, outputIndex: 1 },
+				{ from: loop, to: afterLoop, outputIndex: 0 },
+			);
+		const runData: IRunData = {
+			[trigger.name]: [toITaskData([{ data: { value: 'trigger' } }])],
+			[loop.name]: [
+				toITaskData([{ data: { value: 'loop' }, outputIndex: 1 }]),
+				toITaskData([{ data: { value: 'done' }, outputIndex: 0 }]),
+			],
+			[inLoop.name]: [toITaskData([{ data: { value: 'inLoop' } }])],
+			[afterLoop.name]: [toITaskData([{ data: { value: 'afterLoop' } }])],
+		};
+		const pinData: IPinData = {};
+
+		// ACT
+		const startNodes = findStartNodes(graph, trigger, afterLoop, runData, pinData);
+
+		// ASSERT
+		expect(startNodes).toHaveLength(1);
+		expect(startNodes[0]).toBe(afterLoop);
+	});
+
+	//              ┌─────┐1      ►►
+	//           ┌─►│Node1┼──┐   ┌─────┐
+	// ┌───────┐1│  └─────┘  └──►│     │
+	// │Trigger├─┤               │Node3│
+	// └───────┘ │  ┌─────┐0 ┌──►│     │
+	//           └─►│Node2├──┘   └─────┘
+	//              └─────┘
+	test.skip('foo', () => {
+		// ARRANGE
+		const trigger = createNodeData({ name: 'trigger' });
+		const node1 = createNodeData({ name: 'node1' });
+		const node2 = createNodeData({ name: 'node2' });
+		const node3 = createNodeData({ name: 'node3' });
+		const graph = new DirectedGraph()
+			.addNodes(trigger, node1, node2, node3)
+			.addConnections(
+				{ from: trigger, to: node1 },
+				{ from: trigger, to: node2 },
+				{ from: node1, to: node3, inputIndex: 0 },
+				{ from: node2, to: node3, inputIndex: 1 },
+			);
+		const runData: IRunData = {
+			[trigger.name]: [toITaskData([{ data: {} }])],
+			[node1.name]: [toITaskData([{ data: {} }])],
+		};
+
+		// ACT
+		const startNodes = findStartNodes(graph, trigger, node3, runData);
+
+		// ASSERT
+		expect(startNodes).toHaveLength(1);
+		expect(startNodes[0]).toEqual(node2);
+	});
+
+	describe('custom loop logic', () => {
+		test('if the last run of loop node has no data (null) on the done output, then the loop is the start node', () => {
+			// ARRANGE
+			const trigger = createNodeData({ name: 'trigger' });
+			const loop = createNodeData({ name: 'loop', type: 'n8n-nodes-base.splitInBatches' });
+			const inLoop = createNodeData({ name: 'inLoop' });
+			const afterLoop = createNodeData({ name: 'afterLoop' });
+			const graph = new DirectedGraph()
+				.addNodes(trigger, loop, inLoop, afterLoop)
+				.addConnections(
+					{ from: trigger, to: loop },
+					{ from: loop, outputIndex: 1, to: inLoop },
+					{ from: inLoop, to: loop },
+					{ from: loop, to: afterLoop },
+				);
+			const runData: IRunData = {
+				[trigger.name]: [toITaskData([{ data: { name: 'trigger' } }])],
+				[loop.name]: [
+					// only output on the `loop` branch, but no output on the `done`
+					// branch
+					toITaskData([{ outputIndex: 1, data: { name: 'loop' } }]),
+				],
+				[inLoop.name]: [toITaskData([{ data: { name: 'inLoop' } }])],
+			};
+
+			// ACT
+			const startNodes = findStartNodes(graph, trigger, afterLoop, runData);
+
+			// ASSERT
+			expect(startNodes).toHaveLength(1);
+			expect(startNodes[0]).toEqual(loop);
+		});
+
+		test('if the last run of loop node has no data (empty array) on the done output, then the loop is the start  node', () => {
+			// ARRANGE
+			const trigger = createNodeData({ name: 'trigger' });
+			const loop = createNodeData({ name: 'loop', type: 'n8n-nodes-base.splitInBatches' });
+			const inLoop = createNodeData({ name: 'inLoop' });
+			const afterLoop = createNodeData({ name: 'afterLoop' });
+			const graph = new DirectedGraph()
+				.addNodes(trigger, loop, inLoop, afterLoop)
+				.addConnections(
+					{ from: trigger, to: loop },
+					{ from: loop, outputIndex: 1, to: inLoop },
+					{ from: inLoop, to: loop },
+					{ from: loop, to: afterLoop },
+				);
+			const runData: IRunData = {
+				[trigger.name]: [toITaskData([{ data: { name: 'trigger' } }])],
+				[loop.name]: [
+					// This is handcrafted because `toITaskData` does not allow inserting
+					// an empty array like the first element of `main` below. But the
+					// execution engine creates ITaskData like this.
+					{
+						executionStatus: 'success',
+						executionTime: 0,
+						startTime: 0,
+						source: [],
+						data: { main: [[], [{ json: { name: 'loop' } }]] },
+					},
+				],
+				[inLoop.name]: [toITaskData([{ data: { name: 'inLoop' } }])],
+			};
+
+			// ACT
+			const startNodes = findStartNodes(graph, trigger, afterLoop, runData);
+
+			// ASSERT
+			expect(startNodes).toHaveLength(1);
+			expect(startNodes[0]).toEqual(loop);
+		});
+
+		test('if the loop has data on the done output in the last run it does not become a start node', () => {
+			// ARRANGE
+			const trigger = createNodeData({ name: 'trigger' });
+			const loop = createNodeData({ name: 'loop', type: 'n8n-nodes-base.splitInBatches' });
+			const inLoop = createNodeData({ name: 'inLoop' });
+			const afterLoop = createNodeData({ name: 'afterLoop' });
+			const graph = new DirectedGraph()
+				.addNodes(trigger, loop, inLoop, afterLoop)
+				.addConnections(
+					{ from: trigger, to: loop },
+					{ from: loop, outputIndex: 1, to: inLoop },
+					{ from: inLoop, to: loop },
+					{ from: loop, to: afterLoop },
+				);
+			const runData: IRunData = {
+				[trigger.name]: [toITaskData([{ data: { name: 'trigger' } }])],
+				[loop.name]: [
+					toITaskData([{ outputIndex: 1, data: { name: 'loop' } }]),
+					toITaskData([{ outputIndex: 0, data: { name: 'done' } }]),
+				],
+				[inLoop.name]: [toITaskData([{ data: { name: 'inLoop' } }])],
+			};
+
+			// ACT
+			const startNodes = findStartNodes(graph, trigger, afterLoop, runData);
+
+			// ASSERT
+			expect(startNodes).toHaveLength(1);
+			expect(startNodes[0]).toEqual(afterLoop);
+		});
+	});
 });
